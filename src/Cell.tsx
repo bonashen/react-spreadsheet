@@ -1,64 +1,73 @@
 import * as React from "react";
 import classnames from "classnames";
-import { connect } from "unistore/react";
 import * as PointSet from "./point-set";
 import * as PointMap from "./point-map";
 import * as PointRange from "./point-range";
 import * as Matrix from "./matrix";
 import * as Types from "./types";
+import * as Point from "./point";
 import * as Actions from "./actions";
 import { isActive, getOffsetRect } from "./util";
+import useDispatch from "./use-dispatch";
+import useSelector from "./use-selector";
 
-export const Cell = <Data extends Types.CellBase>({
+export const Cell: React.FC<Types.CellComponentProps> = ({
   row,
   column,
-  setCellDimensions,
-  select,
-  activate,
-  mode,
-  dragging,
+  DataViewer,
   formulaParser,
   selected,
   active,
-  DataViewer,
+  dragging,
+  mode,
   data,
-}: Types.CellComponentProps<Data>): React.ReactElement => {
-  const rootRef = React.useRef<HTMLTableDataCellElement | null>(null);
-  const root = rootRef.current;
+  select,
+  activate,
+  setCellDimensions,
+}): React.ReactElement => {
+  const rootRef = React.useRef<HTMLTableCellElement | null>(null);
+  const point = React.useMemo(
+    (): Point.Point => ({
+      row,
+      column,
+    }),
+    [row, column]
+  );
 
   const handleMouseDown = React.useCallback(
-    (event: React.MouseEvent<HTMLTableDataCellElement>) => {
+    (event: React.MouseEvent<HTMLTableCellElement>) => {
       if (mode === "view") {
-        setCellDimensions({ row, column }, getOffsetRect(event.currentTarget));
+        setCellDimensions(point, getOffsetRect(event.currentTarget));
 
         if (event.shiftKey) {
-          select({ row, column });
+          select(point);
         } else {
-          activate({ row, column });
+          activate(point);
         }
       }
     },
-    [mode, setCellDimensions, row, column, select, activate]
+    [mode, setCellDimensions, point, select, activate]
   );
 
   const handleMouseOver = React.useCallback(
-    (event: React.MouseEvent<HTMLTableDataCellElement>) => {
+    (event: React.MouseEvent<HTMLTableCellElement>) => {
       if (dragging) {
-        setCellDimensions({ row, column }, getOffsetRect(event.currentTarget));
-        select({ row, column });
+        setCellDimensions(point, getOffsetRect(event.currentTarget));
+        select(point);
       }
     },
-    [setCellDimensions, select, dragging, row, column]
+    [setCellDimensions, select, dragging, point]
   );
 
   React.useEffect(() => {
+    const root = rootRef.current;
     if (selected && root) {
-      setCellDimensions({ row, column }, getOffsetRect(root));
+      setCellDimensions(point, getOffsetRect(root));
     }
     if (root && active && mode === "view") {
       root.focus();
     }
-  }, [setCellDimensions, root, select, active, mode, column, row, selected]);
+  }, [setCellDimensions, selected, active, mode, point]);
 
   if (data && data.DataViewer) {
     // @ts-ignore
@@ -85,42 +94,80 @@ export const Cell = <Data extends Types.CellBase>({
   );
 };
 
-function mapStateToProps<Data extends Types.CellBase>(
-  {
-    data,
-    active,
-    selected,
-    copied,
-    mode,
-    dragging,
-    lastChanged,
-    bindings,
-  }: Types.StoreState<Data>,
-  { column, row }: Types.CellComponentProps<Data>
-) {
-  const point = { row, column };
-  const cellIsActive = isActive(active, point);
+export const enhance = (
+  CellComponent: React.FC<Types.CellComponentProps>
+): React.FC<
+  Omit<
+    Types.CellComponentProps,
+    | "selected"
+    | "active"
+    | "copied"
+    | "dragging"
+    | "mode"
+    | "data"
+    | "select"
+    | "activate"
+    | "setCellDimensions"
+  >
+> => {
+  return function CellWrapper(props) {
+    const { row, column } = props;
+    const dispatch = useDispatch();
+    const select = React.useCallback(
+      (point: Point.Point) => dispatch(Actions.select(point)),
+      [dispatch]
+    );
+    const activate = React.useCallback(
+      (point: Point.Point) => dispatch(Actions.activate(point)),
+      [dispatch]
+    );
+    const setCellDimensions = React.useCallback(
+      (point: Point.Point, dimensions: Types.Dimensions) =>
+        dispatch(Actions.setCellDimensions(point, dimensions)),
+      [dispatch]
+    );
+    const active = useSelector((state) =>
+      isActive(state.active, {
+        row,
+        column,
+      })
+    );
+    const mode = useSelector((state) => (active ? state.mode : "view"));
+    const data = useSelector((state) =>
+      Matrix.get({ row, column }, state.data)
+    );
+    const selected = useSelector((state) =>
+      state.selected ? PointRange.has(state.selected, { row, column }) : false
+    );
+    const dragging = useSelector((state) => state.dragging);
+    const copied = useSelector((state) =>
+      PointMap.has({ row, column }, state.copied)
+    );
 
-  const cellBindings = PointMap.get(point, bindings);
-
-  return {
-    active: cellIsActive,
-    selected: selected ? PointRange.has(selected, point) : false,
-    copied: PointMap.has(point, copied),
-    mode: cellIsActive ? mode : "view",
-    data: Matrix.get(row, column, data),
-    dragging,
-    /** @todo refactor */
-    // @ts-ignore
-    _bindingChanged:
-      cellBindings && lastChanged && PointSet.has(cellBindings, lastChanged)
+    // Use only to trigger re-render when cell bindings change
+    useSelector((state) => {
+      const point = { row, column };
+      const cellBindings = PointMap.get(point, state.bindings);
+      return cellBindings &&
+        state.lastChanged &&
+        PointSet.has(cellBindings, state.lastChanged)
         ? {}
-        : null,
-  };
-}
+        : null;
+    });
 
-export const enhance = connect(mapStateToProps, () => ({
-  select: Actions.select,
-  activate: Actions.activate,
-  setCellDimensions: Actions.setCellDimensions,
-}));
+    return (
+      <CellComponent
+        {...props}
+        selected={selected}
+        active={active}
+        copied={copied}
+        dragging={dragging}
+        mode={mode}
+        data={data}
+        select={select}
+        activate={activate}
+        setCellDimensions={setCellDimensions}
+      />
+    );
+  };
+};

@@ -42,6 +42,9 @@ flow-typed/
 # Typescript v1 declaration files
 typings/
 
+# Typescript
+tsconfig.json
+
 # Optional npm cache directory
 .npm
 
@@ -68,6 +71,7 @@ src/
 
 __tests__/
 __fixtures__/
+*.test.*
 
 # Scripts
 
@@ -80,5 +84,24 @@ scripts/
 babel.config*
 .github/
 rollup.config.js
-*.test.ts
-*.stories.ts
+
+# Website
+
+website/
+
+# Reference
+
+reference/
+typedoc.json
+
+# Storybook
+.storybook
+**/stories/
+*.stories.*
+
+# Prettier
+.prettierignore
+
+# Stylelint
+.stylelintrc.json
+.stylelintignore

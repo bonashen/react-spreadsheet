@@ -1,30 +1,35 @@
-/**
- * Immutable interface for Matrices
- *
- * @todo use Types.Point for all point references
- */
+import * as Point from "./point";
 
-import * as Types from "./types";
-
+/** A two-dimensional array of given type T in rows and columns */
 export type Matrix<T> = Array<Array<T | undefined>>;
 
+/**
+ * Creates an empty matrix with given rows and columns
+ * @param rows - integer, the amount of rows the matrix should have
+ * @param columns - integer, the amount of columns the matrix should have
+ * @returns an empty matrix with given rows and columns
+ */
+export function createEmpty<T>(rows: number, columns: number): Matrix<T> {
+  const matrix = Array(rows);
+  for (let i = 0; i < rows; i++) {
+    matrix[i] = Array(columns);
+  }
+  return matrix;
+}
+
 /** Gets the value at row and column of matrix. */
-export function get<T>(
-  row: number,
-  column: number,
-  matrix: Matrix<T>
-): T | undefined {
-  const columns = matrix[row];
+export function get<T>(point: Point.Point, matrix: Matrix<T>): T | undefined {
+  const columns = matrix[point.row];
   if (columns === undefined) {
     return undefined;
   }
-  return columns[column];
+  return columns[point.column];
 }
 
 /** Creates a slice of matrix from startPoint up to, but not including, endPoint. */
 export function slice<T>(
-  startPoint: Types.Point,
-  endPoint: Types.Point,
+  startPoint: Point.Point,
+  endPoint: Point.Point,
   matrix: Matrix<T>
 ): Matrix<T> {
   const sliced: Matrix<T> = [];
@@ -33,7 +38,10 @@ export function slice<T>(
     const slicedRow = row - startPoint.row;
     sliced[slicedRow] = sliced[slicedRow] || Array(columns);
     for (let column = startPoint.column; column <= endPoint.column; column++) {
-      sliced[slicedRow][column - startPoint.column] = get(row, column, matrix);
+      sliced[slicedRow][column - startPoint.column] = get(
+        { row, column },
+        matrix
+      );
     }
   }
   return sliced;
@@ -41,8 +49,7 @@ export function slice<T>(
 
 /** Sets the value at row and column of matrix. If a row doesn't exist, it's created. */
 export function set<T>(
-  row: number,
-  column: number,
+  point: Point.Point,
   value: T,
   matrix: Matrix<T>
 ): Matrix<T> {
@@ -51,22 +58,21 @@ export function set<T>(
   // Synchronize first row length
   const firstRow = matrix[0];
   const nextFirstRow = firstRow ? [...firstRow] : [];
-  if (nextFirstRow.length - 1 < column) {
-    nextFirstRow[column] = undefined;
+  if (nextFirstRow.length - 1 < point.column) {
+    nextFirstRow[point.column] = undefined;
     nextMatrix[0] = nextFirstRow;
   }
 
-  const nextRow = matrix[row] ? [...matrix[row]] : [];
-  nextRow[column] = value;
-  nextMatrix[row] = nextRow;
+  const nextRow = matrix[point.row] ? [...matrix[point.row]] : [];
+  nextRow[point.column] = value;
+  nextMatrix[point.row] = nextRow;
 
   return nextMatrix;
 }
 
 /** Like Matrix.set() but mutates the matrix */
 export function mutableSet<T>(
-  row: number,
-  column: number,
+  point: Point.Point,
   value: T,
   matrix: Matrix<T>
 ): void {
@@ -75,45 +81,41 @@ export function mutableSet<T>(
     firstRow = [];
     matrix[0] = firstRow;
   }
-  if (!(row in matrix)) {
-    matrix[row] = [];
+  if (!(point.row in matrix)) {
+    matrix[point.row] = [];
   }
   // Synchronize first row length
-  if (!(column in firstRow)) {
-    firstRow[column] = undefined;
+  if (!(point.column in firstRow)) {
+    firstRow[point.column] = undefined;
   }
-  matrix[row][column] = value;
+  matrix[point.row][point.column] = value;
 }
 
 /** Removes the coordinate of matrix */
-export function unset<T>(
-  row: number,
-  column: number,
-  matrix: Matrix<T>
-): Matrix<T> {
-  if (!has(row, column, matrix)) {
+export function unset<T>(point: Point.Point, matrix: Matrix<T>): Matrix<T> {
+  if (!has(point, matrix)) {
     return matrix;
   }
   const nextMatrix = [...matrix];
-  const nextRow = [...matrix[row]];
+  const nextRow = [...matrix[point.row]];
 
   // Avoid deleting to preserve first row length
-  nextRow[column] = undefined;
-  nextMatrix[row] = nextRow;
+  nextRow[point.column] = undefined;
+  nextMatrix[point.row] = nextRow;
 
   return nextMatrix;
 }
 
 /** Creates an array of values by running each element in collection thru iteratee. */
 export function map<T, T2>(
-  func: (arg0: T | undefined, arg1: Types.Point) => T2,
+  func: (value: T | undefined, point: Point.Point) => T2,
   matrix: Matrix<T>
 ): Matrix<T2> {
   const newMatrix: Matrix<T2> = [];
   for (const [row, values] of matrix.entries()) {
     for (const [column, value] of values.entries()) {
       const point = { row, column };
-      mutableSet(row, column, func(value, point), newMatrix);
+      mutableSet(point, func(value, point), newMatrix);
     }
   }
   return newMatrix;
@@ -162,24 +164,27 @@ export function split<T>(
 }
 
 /** Returns whether the point exists in the matrix or not. */
-export function has(row: number, column: number, matrix: Matrix<any>): boolean {
+export function has(point: Point.Point, matrix: Matrix<any>): boolean {
   const firstRow = matrix[0];
   return (
     firstRow &&
     // validation
-    row >= 0 &&
-    column >= 0 &&
-    Number.isInteger(row) &&
-    Number.isInteger(column) &&
+    point.row >= 0 &&
+    point.column >= 0 &&
+    Number.isInteger(point.row) &&
+    Number.isInteger(point.column) &&
     // first row length is in sync with other rows
-    column < firstRow.length &&
-    row < matrix.length
+    point.column < firstRow.length &&
+    point.row < matrix.length
   );
 }
 
-type Size = {
-  columns: number;
+/** Matrix size */
+export type Size = {
+  /** Count of the rows in the matrix */
   rows: number;
+  /** Count of the columns in the matrix */
+  columns: number;
 };
 
 /** Gets the size of matrix by returning its number of rows and columns */
@@ -193,8 +198,8 @@ export function getSize(matrix: Matrix<any>): Size {
 
 /**
  * Pads matrix with empty rows to match given total rows
- * @param matrix matrix to pad
- * @param totalRows number of rows the matrix should have
+ * @param matrix - matrix to pad
+ * @param totalRows - number of rows the matrix should have
  * @returns the updated matrix
  */
 export function padRows<T>(matrix: Matrix<T>, totalRows: number): Matrix<T> {
@@ -213,13 +218,13 @@ export function padRows<T>(matrix: Matrix<T>, totalRows: number): Matrix<T> {
 export function toArray<T>(matrix: Matrix<T>): T[];
 export function toArray<T1, T2>(
   matrix: Matrix<T1>,
-  transform: (cell: T1 | undefined, coords: Types.Point) => T2
+  transform: (cell: T1 | undefined, coords: Point.Point) => T2
 ): T2[];
 
 /**
  * Flattens a matrix values to an array
- * @param matrix the matrix to flatten values from
- * @param transform optional transform function to apply to each value in the
+ * @param matrix - the matrix to flatten values from
+ * @param transform - optional transform function to apply to each value in the
  * matrix
  * @returns an array of the values from matrix, transformed if a transform
  * function is passed
@@ -227,7 +232,7 @@ export function toArray<T1, T2>(
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export function toArray<T1, T2>(
   matrix: Matrix<T1>,
-  transform?: (cell: T1 | undefined, coords: Types.Point) => T2
+  transform?: (cell: T1 | undefined, coords: Point.Point) => T2
 ) {
   const array = [];
   for (let row = 0; row < matrix.length; row++) {
@@ -238,4 +243,10 @@ export function toArray<T1, T2>(
   }
 
   return array;
+}
+
+/** Returns the maximum point in the matrix */
+export function maxPoint(matrix: Matrix<unknown>): Point.Point {
+  const size = getSize(matrix);
+  return { row: size.rows - 1, column: size.columns - 1 };
 }

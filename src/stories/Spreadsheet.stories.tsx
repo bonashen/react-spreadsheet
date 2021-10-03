@@ -24,11 +24,14 @@ export default {
 } as Meta<Props<StringCell>>;
 
 export const Basic: Story<Props<StringCell>> = (props) => (
-  <Spreadsheet {...props} data={props.data} />
+  <Spreadsheet {...props} />
+);
+
+export const DarkMode: Story<Props<StringCell>> = (props) => (
+  <Spreadsheet {...props} darkMode />
 );
 
 export const Controlled: Story<Props<StringCell>> = (props) => {
-  console.log(props);
   const [data, setData] = React.useState(EMPTY_DATA);
 
   const addColumn = React.useCallback(

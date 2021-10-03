@@ -1,83 +1,102 @@
 import * as React from "react";
 import classnames from "classnames";
-import { connect } from "unistore/react";
 import * as Matrix from "./matrix";
 import * as Actions from "./actions";
 import * as Types from "./types";
+import * as Point from "./point";
+import useSelector from "./use-selector";
+import useDispatch from "./use-dispatch";
 import { getCellDimensions } from "./util";
 
-type Props<Cell extends Types.CellBase> = {
-  DataEditor: Types.DataEditorComponent<Cell>;
-  onChange: (data: Cell) => void;
-  setCellData: (
-    active: Types.Point,
-    data: Cell,
-    bindings: Types.Point[]
-  ) => void;
-  cell: Cell;
-  hidden: boolean;
-  mode: Types.Mode;
-  edit: () => void;
-  commit: Types.commit<Cell>;
-  getBindingsForCell: Types.getBindingsForCell<Cell>;
-  data: Matrix.Matrix<Cell>;
-} & Types.Point &
-  Types.Dimensions;
+type Props = {
+  DataEditor: Types.DataEditorComponent;
+  getBindingsForCell: Types.GetBindingsForCell<Types.CellBase>;
+};
 
-function ActiveCell<Cell extends Types.CellBase>(props: Props<Cell>) {
-  const {
-    row,
-    column,
-    cell,
-    width,
-    height,
-    top,
-    left,
-    hidden,
-    mode,
-    edit,
-    setCellData,
-    getBindingsForCell,
-    commit,
-    data,
-  } = props;
-  const initialCellRef = React.useRef<Cell | null>(null);
-  const prevPropsRef = React.useRef<Props<Cell> | null>(null);
+const ActiveCell: React.FC<Props> = (props) => {
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const { getBindingsForCell } = props;
+
+  const dispatch = useDispatch();
+  const setCellData = React.useCallback(
+    (active: Point.Point, data: Types.CellBase) =>
+      dispatch(Actions.setCellData(active, data, getBindingsForCell)),
+    [dispatch, getBindingsForCell]
+  );
+  const edit = React.useCallback(() => dispatch(Actions.edit()), [dispatch]);
+  const commit = React.useCallback(
+    (changes: Types.CommitChanges<Types.CellBase>) =>
+      dispatch(Actions.commit(changes)),
+    [dispatch]
+  );
+  const view = React.useCallback(() => {
+    dispatch(Actions.view());
+  }, [dispatch]);
+  const active = useSelector((state) => state.active);
+  const mode = useSelector((state) => state.mode);
+  const cell = useSelector((state) =>
+    state.active ? Matrix.get(state.active, state.data) : undefined
+  );
+  const dimensions = useSelector((state) =>
+    active
+      ? getCellDimensions(active, state.rowDimensions, state.columnDimensions)
+      : undefined
+  );
+  const hidden = React.useMemo(
+    () => !active || !dimensions,
+    [active, dimensions]
+  );
+
+  const initialCellRef = React.useRef<Types.CellBase | undefined>(undefined);
+  const prevActiveRef = React.useRef<Point.Point | null>(null);
+  const prevCellRef = React.useRef<Types.CellBase | undefined>(undefined);
 
   const handleChange = React.useCallback(
-    (cell: Cell) => {
-      const bindings = getBindingsForCell(cell, data);
-      setCellData({ row, column }, cell, bindings);
+    (cell: Types.CellBase) => {
+      if (!active) {
+        return;
+      }
+      setCellData(active, cell);
     },
-    [getBindingsForCell, setCellData, row, column, data]
+    [setCellData, active]
   );
 
   React.useEffect(() => {
-    const prevProps = prevPropsRef.current;
-    prevPropsRef.current = props;
+    const root = rootRef.current;
+    if (!hidden && root) {
+      root.focus();
+    }
+  }, [rootRef, hidden]);
 
-    if (!prevProps) {
+  React.useEffect(() => {
+    const prevActive = prevActiveRef.current;
+    const prevCell = prevCellRef.current;
+    prevActiveRef.current = active;
+    prevCellRef.current = cell;
+
+    if (!prevActive || !prevCell) {
       return;
     }
 
     // Commit
-    const coordsChanged = row !== prevProps.row || column !== prevProps.column;
+    const coordsChanged =
+      active?.row !== prevActive.row || active?.column !== prevActive.column;
     const exitedEditMode = mode !== "edit";
 
     if (coordsChanged || exitedEditMode) {
       const initialCell = initialCellRef.current;
-      if (prevProps.cell !== initialCell) {
+      if (prevCell !== initialCell) {
         commit([
           {
-            prevCell: initialCell,
-            nextCell: prevProps.cell,
+            prevCell: initialCell || null,
+            nextCell: prevCell,
           },
         ]);
-      } else if (!coordsChanged && cell !== prevProps.cell) {
+      } else if (!coordsChanged && cell !== prevCell) {
         commit([
           {
-            prevCell: prevProps.cell,
-            nextCell: cell,
+            prevCell,
+            nextCell: cell || null,
           },
         ]);
       }
@@ -90,49 +109,27 @@ function ActiveCell<Cell extends Types.CellBase>(props: Props<Cell>) {
 
   return hidden ? null : (
     <div
+      ref={rootRef}
       className={classnames(
         "Spreadsheet__active-cell",
         `Spreadsheet__active-cell--${mode}`
       )}
-      style={{ width, height, top, left }}
+      style={dimensions}
       onClick={mode === "view" && !readOnly ? edit : undefined}
+      tabIndex={0}
     >
-      {mode === "edit" && (
+      {mode === "edit" && active && (
         <DataEditor
-          row={row}
-          column={column}
+          row={active.row}
+          column={active.column}
           cell={cell}
           // @ts-ignore
           onChange={handleChange}
+          exitEditMode={view}
         />
       )}
     </div>
   );
-}
+};
 
-function mapStateToProps<Cell extends Types.CellBase>(
-  state: Types.StoreState<Cell>
-): Partial<Props<Cell>> {
-  const dimensions = state.active && getCellDimensions(state.active, state);
-  if (!state.active || !dimensions) {
-    return { hidden: true };
-  }
-  return {
-    ...state.active,
-    hidden: false,
-    cell: Matrix.get(state.active.row, state.active.column, state.data),
-    width: dimensions.width,
-    height: dimensions.height,
-    top: dimensions.top,
-    left: dimensions.left,
-    mode: state.mode,
-    data: state.data,
-  };
-}
-
-export default connect(mapStateToProps, {
-  setCellData: Actions.setCellData,
-  edit: Actions.edit,
-  commit: Actions.commit,
-  // @ts-ignore
-})(ActiveCell);
+export default ActiveCell;

@@ -1,43 +1,30 @@
 import * as React from "react";
-import { connect } from "unistore/react";
-import * as Types from "./types";
-import FloatingRect, {
-  Props as FloatingRectProps,
-  StateProps,
-} from "./FloatingRect";
+import FloatingRect from "./FloatingRect";
 import * as PointRange from "./point-range";
 import { getRangeDimensions } from "./util";
+import useSelector from "./use-selector";
 
-type Props = Omit<FloatingRectProps, "variant">;
+const Selected: React.FC = () => {
+  const selected = useSelector((state) => state.selected);
+  const dimensions = useSelector(
+    (state) =>
+      selected &&
+      getRangeDimensions(state.rowDimensions, state.columnDimensions, selected)
+  );
+  const dragging = useSelector((state) => state.dragging);
+  const hidden = React.useMemo(() => isHidden(selected), [selected]);
+  return (
+    <FloatingRect
+      variant="selected"
+      dimensions={dimensions}
+      dragging={dragging}
+      hidden={hidden}
+    />
+  );
+};
 
-const Selected: React.FC<Props> = (props) => (
-  <FloatingRect {...props} variant="selected" />
-);
+export default Selected;
 
-export default connect<{}, {}, Types.StoreState, StateProps>((state) => {
-  const props = mapStateToProps(state, state.selected);
-  return {
-    ...props,
-    hidden:
-      props.hidden ||
-      Boolean(state.selected && PointRange.size(state.selected) === 1),
-    dragging: state.dragging,
-  };
-})(Selected);
-
-/** @todo move to floating rect */
-function mapStateToProps(
-  state: Types.StoreState,
-  range: PointRange.PointRange | null
-): Types.Dimensions & { hidden: boolean } {
-  const dimensions = (range && getRangeDimensions(state, range)) || {
-    width: 0,
-    height: 0,
-    left: 0,
-    top: 0,
-  };
-  return {
-    ...dimensions,
-    hidden: !range,
-  };
+export function isHidden(selected: PointRange.PointRange | null): boolean {
+  return !selected || Boolean(selected && PointRange.size(selected) === 1);
 }

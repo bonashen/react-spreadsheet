@@ -1,13 +1,22 @@
-export { default, default as Spreadsheet } from "./SpreadsheetStateProvider";
-export type { Props } from "./SpreadsheetStateProvider";
-export { createEmptyMatrix, getComputedValue } from "./util";
-export { default as DataEditor } from "./DataEditor";
-export { default as DataViewer } from "./DataViewer";
-export type { Matrix } from "./matrix";
+import Spreadsheet from "./Spreadsheet";
+import DataEditor from "./DataEditor";
+import DataViewer from "./DataViewer";
+
+export default Spreadsheet;
+export { Spreadsheet, DataEditor, DataViewer };
+export type { Props } from "./Spreadsheet";
+export { getComputedValue } from "./util";
+export { Matrix, createEmpty as createEmptyMatrix } from "./matrix";
+export type { Point } from "./point";
 export type {
   CellBase,
-  CellComponent,
+  CellDescriptor,
+  Mode,
+  Dimensions,
+  GetBindingsForCell,
+  CellChange,
   CellComponentProps,
+  CellComponent,
   DataViewerProps,
   DataViewerComponent,
   DataEditorProps,
